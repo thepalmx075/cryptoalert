@@ -438,4 +438,65 @@ if bt:
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.caption("No hubo alertas suficientes en el h
+    st.caption("No hubo alertas suficientes en el historial disponible para calcular precisión real.")
+
+# ============ MÁS ACCIONES ============
+with st.expander("Comparar con otra moneda", icon=":material/compare_arrows:"):
+    opciones_comparar = [m for m in MONEDAS if m != nombre_moneda]
+    moneda_comparar = st.selectbox("Comparar rendimiento contra:", opciones_comparar, key="comparar_moneda")
+    simbolo_comp = MONEDAS[moneda_comparar]
+    datos_comp = calcular_variables(traer_datos(simbolo_comp)).tail(dias_rango).reset_index(drop=True)
+
+    if datos_comp.empty:
+        st.warning(f"No se pudieron cargar datos de {moneda_comparar} en este momento. Intenta actualizar en unos segundos.")
+    else:
+        base_actual = datos["precio"].iloc[0]
+        base_comp = datos_comp["precio"].iloc[0]
+        rendimiento_actual = (datos["precio"] / base_actual - 1) * 100
+        rendimiento_comp = (datos_comp["precio"] / base_comp - 1) * 100
+
+        fig_comp = go.Figure()
+        fig_comp.add_trace(go.Scatter(x=datos["fecha"], y=rendimiento_actual, mode="lines",
+                                       line=dict(color="#2DD4BF", width=2), name=nombre_moneda))
+        fig_comp.add_trace(go.Scatter(x=datos_comp["fecha"], y=rendimiento_comp, mode="lines",
+                                       line=dict(color="#F472B6", width=2), name=moneda_comparar))
+        fig_comp.update_layout(
+            template="plotly_dark", height=320, margin=dict(l=10, r=10, t=30, b=10),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            legend=dict(orientation="h", y=1.12), yaxis_title="% desde inicio del periodo"
+        )
+        st.plotly_chart(fig_comp, use_container_width=True)
+        st.caption(f"Rendimiento normalizado (% desde el inicio del periodo de {rango_sel}) para comparar de forma justa, sin importar la escala de precio de cada moneda.")
+
+with st.expander("¿Qué variables pesan más en la predicción del modelo?", icon=":material/bar_chart:"):
+    importancias = pd.Series(modelo.feature_importances_, index=variables).sort_values()
+    fig_imp = go.Figure(go.Bar(x=importancias.values, y=importancias.index, orientation="h", marker_color="#38BDF8"))
+    fig_imp.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=10, b=10),
+                           paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig_imp, use_container_width=True)
+    st.caption("Mientras más larga la barra, más influye esa variable en la decisión del modelo.")
+
+with st.expander("Ver variables técnicas del día actual", icon=":material/biotech:"):
+    st.dataframe(ultimo[variables].to_frame(name="valor"), use_container_width=True)
+
+with st.expander("Descargar historial de datos (CSV)", icon=":material/download:"):
+    csv = datos.to_csv(index=False).encode("utf-8")
+    st.download_button("Descargar CSV", csv, file_name=f"{simbolo}_historial.csv", mime="text/csv")
+
+with st.expander("Resumen para compartir", icon=":material/content_copy:"):
+    resumen_txt = (
+        f"CryptoAlert — {nombre_moneda}\n"
+        f"Precio: ${ultimo['precio']:,.2f} ({ultimo['cambio_%']:+.2f}% 24h)\n"
+        f"Riesgo: {nivel} ({probabilidad*100:.1f}% de confianza)\n"
+        f"RSI: {ultimo['rsi']:.0f} · Actualizado: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    )
+    st.code(resumen_txt, language=None)
+
+st.divider()
+st.caption(f"Datos vía Yahoo Finance · última fecha disponible: {ultimo['fecha'].date()}")
+st.caption("Modelo: Random Forest entrenado con BTC, ETH, SOL y BNB (2 años) · validación cruzada temporal · umbral optimizado por F1-score")
+st.markdown(
+    f'<div style="font-size:13px;color:#8891A0;">{line_icon("info", 14, "#8891A0")}'
+    f'Herramienta educativa. No constituye asesoría financiera.</div>',
+    unsafe_allow_html=True
+)
